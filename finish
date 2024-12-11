@@ -1,0 +1,117 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# === 맥스웰 함수 정의 ===
+def maxwell_scalar(mach, base_value):
+    """
+    맥스웰 수에 따라 스칼라 값을 계산합니다.
+    - mach: 맥스웰 수
+    - base_value: 기준 값
+    """
+    return base_value * mach**2
+
+# === 물리적 변수와 초기 조건 ===
+mach = 0.3  # 맥스웰 수
+c_sound = 343.0  # 음속 (m/s)
+u_top = mach * c_sound  # 위 경계 속도
+
+# 상수값을 맥스웰 함수로 정의
+rho = lambda x, y: maxwell_scalar(mach, 1.0)  # 밀도
+mu = lambda x, y: maxwell_scalar(mach, 0.1)  # 점성 계수
+nu = lambda x, y: mu(x, y) / rho(x, y)  # 동점성 계수
+
+# 격자 설정
+nx, ny = 41, 41
+lx, ly = 2.0, 2.0
+dx, dy = lx / (nx - 1), ly / (ny - 1)
+x = np.linspace(0, lx, nx)
+y = np.linspace(0, ly, ny)
+X, Y = np.meshgrid(x, y)
+
+# 초기 조건
+u = np.zeros((ny, nx))  # x 방향 속도
+v = np.zeros((ny, nx))  # y 방향 속도
+p = np.zeros((ny, nx))  # 압력
+
+# 시간 스텝
+nt = 500
+dt = 0.01
+
+# === 편미분 계산 함수 ===
+def partial_derivative(f, dx, axis):
+    """
+    편미분 계산 (중앙 차분법).
+    - f: 함수 값 배열
+    - dx: 격자 간격
+    - axis: 미분 방향 (0: y, 1: x)
+    """
+    return (np.roll(f, -1, axis=axis) - np.roll(f, 1, axis=axis)) / (2 * dx)
+
+def laplacian(f, dx, dy):
+    """
+    2차 미분 계산 (라플라시안).
+    """
+    d2f_dx2 = (np.roll(f, -1, axis=1) - 2 * f + np.roll(f, 1, axis=1)) / dx**2
+    d2f_dy2 = (np.roll(f, -1, axis=0) - 2 * f + np.roll(f, 1, axis=0)) / dy**2
+    return d2f_dx2 + d2f_dy2
+
+# === 경계 조건 함수 ===
+def apply_boundary_conditions(u, v, p):
+    u[0, :] = 0
+    u[-1, :] = u_top
+    v[:, 0] = 0
+    v[:, -1] = 0
+    return u, v, p
+
+# === 나비에-스토크스 계산 ===
+def navier_stokes(u, v, p, rho, mu, nu, dx, dy, dt, nt):
+    for _ in range(nt):
+        un = u.copy()
+        vn = v.copy()
+        pn = p.copy()
+
+        # 운동량 방정식 (x 방향)
+        u[1:-1, 1:-1] = (
+            un[1:-1, 1:-1]
+            + dt * (
+                -un[1:-1, 1:-1] * partial_derivative(un, dx, axis=1)[1:-1, 1:-1]
+                - vn[1:-1, 1:-1] * partial_derivative(un, dy, axis=0)[1:-1, 1:-1]
+                - (1 / rho(X, Y)) * partial_derivative(pn, dx, axis=1)[1:-1, 1:-1]
+                + nu(X, Y) * laplacian(un, dx, dy)[1:-1, 1:-1]
+            )
+        )
+
+        # 운동량 방정식 (y 방향)
+        v[1:-1, 1:-1] = (
+            vn[1:-1, 1:-1]
+            + dt * (
+                -un[1:-1, 1:-1] * partial_derivative(vn, dx, axis=1)[1:-1, 1:-1]
+                - vn[1:-1, 1:-1] * partial_derivative(vn, dy, axis=0)[1:-1, 1:-1]
+                - (1 / rho(X, Y)) * partial_derivative(pn, dy, axis=0)[1:-1, 1:-1]
+                + nu(X, Y) * laplacian(vn, dx, dy)[1:-1, 1:-1]
+            )
+        )
+
+        # 압력 방정식
+        p[1:-1, 1:-1] = pn[1:-1, 1:-1] - dt * rho(X, Y) * (
+            partial_derivative(un, dx, axis=1)[1:-1, 1:-1]
+            + partial_derivative(vn, dy, axis=0)[1:-1, 1:-1]
+        )
+
+        # 경계 조건 적용
+        u, v, p = apply_boundary_conditions(u, v, p)
+
+    return u, v, p
+
+# === 시뮬레이션 수행 ===
+u, v, p = navier_stokes(u, v, p, rho, mu, nu, dx, dy, dt, nt)
+
+# === 결과 시각화 ===
+plt.figure(figsize=(11, 7))
+plt.contourf(X, Y, p, alpha=0.5, cmap="viridis")
+plt.colorbar(label="Pressure")
+plt.quiver(X, Y, u, v, color="red")
+plt.xlabel("X")
+plt.ylabel("Y")
+plt.title("Velocity Field and Pressure Contours")
+plt.show()
