@@ -1,25 +1,50 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
-# === 맥스웰 방정식 계산 ===
+# === Helper Functions ===
+def partial_derivative(f, dx, axis):
+    """Calculate partial derivative using central difference."""
+    return (np.roll(f, -1, axis=axis) - np.roll(f, 1, axis=axis)) / (2 * dx)
+
+def laplacian(f, dx, dy):
+    """Calculate 2D Laplacian."""
+    d2f_dx2 = (np.roll(f, -1, axis=1) - 2 * f + np.roll(f, 1, axis=1)) / dx**2
+    d2f_dy2 = (np.roll(f, -1, axis=0) - 2 * f + np.roll(f, 1, axis=0)) / dy**2
+    return d2f_dx2 + d2f_dy2
+
+def apply_boundary_conditions(u, v, p):
+    """Apply boundary conditions."""
+    u[:, 0] = u[:, -1] = 0  # Left and right boundaries
+    v[:, 0] = v[:, -1] = 0
+    u[0, :] = u[-1, :] = 0  # Top and bottom boundaries
+    v[0, :] = v[-1, :] = 0
+    p[:, 0] = p[:, -1] = p[0, :] = p[-1, :] = 0
+    return u, v, p
+
+# === Maxwell Force Calculation ===
 def calculate_electromagnetic_force(rho_e, J, E, B):
     """
-    전자기력 계산
-    rho_e: 전하 밀도 (Charge Density)
-    J: 전류 밀도 (Current Density, Vector Field)
-    E: 전기장 (Electric Field, Vector Field)
-    B: 자기장 (Magnetic Field, Vector Field)
+    Calculate electromagnetic force.
+    rho_e: Charge density (shape: ny x nx)
+    J: Current density (vector field, shape: ny x nx x 2)
+    E: Electric field (vector field, shape: ny x nx x 2)
+    B: Magnetic field (vector field, shape: ny x nx x 2)
     """
-    F_em = rho_e[:, :, None] * E + np.cross(J, B, axis=2)  # \rho_e * E + J x B
+    # Expand rho_e to match E's shape
+    rho_e_expanded = np.repeat(rho_e[:, :, None], 2, axis=2)  # (ny, nx) -> (ny, nx, 2)
+    
+    # Calculate electromagnetic force
+    F_em = rho_e_expanded * E + np.cross(J, B, axis=2)  # F = rho_e * E + J x B
     return F_em
 
-# === 나비에-스토크스 계산 ===
+# === Navier-Stokes Solver ===
 def navier_stokes_with_em(u, v, p, rho, mu, dx, dy, dt, nt, F_em):
     for _ in range(nt):
         un = u.copy()
         vn = v.copy()
         pn = p.copy()
 
-        # 운동량 방정식 (x 방향)
+        # Momentum equation (x-direction)
         u[1:-1, 1:-1] = (
             un[1:-1, 1:-1]
             + dt * (
@@ -27,11 +52,11 @@ def navier_stokes_with_em(u, v, p, rho, mu, dx, dy, dt, nt, F_em):
                 - vn[1:-1, 1:-1] * partial_derivative(un, dy, axis=0)[1:-1, 1:-1]
                 - (1 / rho) * partial_derivative(pn, dx, axis=1)[1:-1, 1:-1]
                 + mu * laplacian(un, dx, dy)[1:-1, 1:-1]
-                + F_em[1:-1, 1:-1, 0] / rho  # 전자기력 x-성분 추가
+                + F_em[1:-1, 1:-1, 0] / rho  # EM force x-component
             )
         )
 
-        # 운동량 방정식 (y 방향)
+        # Momentum equation (y-direction)
         v[1:-1, 1:-1] = (
             vn[1:-1, 1:-1]
             + dt * (
@@ -39,57 +64,54 @@ def navier_stokes_with_em(u, v, p, rho, mu, dx, dy, dt, nt, F_em):
                 - vn[1:-1, 1:-1] * partial_derivative(vn, dy, axis=0)[1:-1, 1:-1]
                 - (1 / rho) * partial_derivative(pn, dy, axis=0)[1:-1, 1:-1]
                 + mu * laplacian(vn, dx, dy)[1:-1, 1:-1]
-                + F_em[1:-1, 1:-1, 1] / rho  # 전자기력 y-성분 추가
+                + F_em[1:-1, 1:-1, 1] / rho  # EM force y-component
             )
         )
 
-        # 압력 방정식
+        # Pressure correction
         p[1:-1, 1:-1] = pn[1:-1, 1:-1] - dt * rho * (
             partial_derivative(un, dx, axis=1)[1:-1, 1:-1]
             + partial_derivative(vn, dy, axis=0)[1:-1, 1:-1]
         )
 
-        # 경계 조건 적용
+        # Apply boundary conditions
         u, v, p = apply_boundary_conditions(u, v, p)
 
     return u, v, p
 
-# === 시뮬레이션 설정 ===
-# 격자와 초기 값
+# === Simulation Parameters ===
 nx, ny = 50, 50
 dx, dy = 1.0 / (nx - 1), 1.0 / (ny - 1)
 x = np.linspace(0, 1, nx)
 y = np.linspace(0, 1, ny)
 X, Y = np.meshgrid(x, y)
 
-# 초기값 설정
+# Initial conditions
 u = np.zeros((ny, nx))
 v = np.zeros((ny, nx))
 p = np.zeros((ny, nx))
-rho = 1.0
-mu = 0.1
+rho = 1.0  # Fluid density
+mu = 0.1  # Dynamic viscosity
 dt = 0.01
 nt = 100
 
-# 전기장(E) 및 자기장(B) 설정
-E = np.zeros((ny, nx, 2))  # 2D 전기장
-B = np.zeros((ny, nx, 2))  # 2D 자기장
-rho_e = np.ones((ny, nx))  # 전하 밀도
-J = np.zeros((ny, nx, 2))  # 전류 밀도
+# Electric and Magnetic Fields
+E = np.zeros((ny, nx, 2))  # Electric field (shape: ny x nx x 2)
+B = np.zeros((ny, nx, 2))  # Magnetic field (shape: ny x nx x 2)
+rho_e = np.ones((ny, nx))  # Charge density (shape: ny x nx)
+J = np.zeros((ny, nx, 2))  # Current density (shape: ny x nx x 2)
 
-# 전기장 및 자기장 초기화 (임의 값 예제)
-E[:, :, 0] = 1.0  # x-방향 전기장
-B[:, :, 1] = 1.0  # y-방향 자기장
+# Initialize fields
+E[:, :, 0] = 1.0  # x-direction electric field
+B[:, :, 1] = 1.0  # y-direction magnetic field
 
-# 전자기력 계산
+# Calculate Electromagnetic Force
 F_em = calculate_electromagnetic_force(rho_e, J, E, B)
 
-# 나비에-스토크스 방정식 계산
+# Solve Navier-Stokes with Electromagnetic Forces
 u, v, p = navier_stokes_with_em(u, v, p, rho, mu, dx, dy, dt, nt, F_em)
 
-# 결과 시각화
-import matplotlib.pyplot as plt
-
+# === Visualization ===
 plt.figure(figsize=(11, 7))
 plt.contourf(X, Y, p, alpha=0.5, cmap="viridis")
 plt.colorbar(label="Pressure")
@@ -98,3 +120,5 @@ plt.xlabel("X")
 plt.ylabel("Y")
 plt.title("Velocity Field and Pressure Contours with Electromagnetic Forces")
 plt.show()
+
+
