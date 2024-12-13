@@ -30,10 +30,7 @@ def calculate_electromagnetic_force(rho_e, J, E, B):
     E: Electric field (vector field, shape: ny x nx x 2)
     B: Magnetic field (vector field, shape: ny x nx x 2)
     """
-    # Expand rho_e to match E's shape
-    rho_e_expanded = np.repeat(rho_e[:, :, None], 2, axis=2)  # (ny, nx) -> (ny, nx, 2)
-    
-    # Calculate electromagnetic force
+    rho_e_expanded = rho_e[:, :, None]  # (ny, nx) -> (ny, nx, 1)
     F_em = rho_e_expanded * E + np.cross(J, B, axis=2)  # F = rho_e * E + J x B
     return F_em
 
@@ -80,11 +77,15 @@ def navier_stokes_with_em(u, v, p, rho, mu, dx, dy, dt, nt, F_em):
     return u, v, p
 
 # === Simulation Parameters ===
-nx, ny = 50, 50
-dx, dy = 1.0 / (nx - 1), 1.0 / (ny - 1)
+# Further reduced grid size
+nx, ny = 10, 10  # Minimum grid size
+dx = 1.0 / (nx - 1)
+dy = 1.0 / (ny - 1)
 x = np.linspace(0, 1, nx)
 y = np.linspace(0, 1, ny)
 X, Y = np.meshgrid(x, y)
+
+print(f"Adjusted grid size: nx={nx}, ny={ny}")
 
 # Initial conditions
 u = np.zeros((ny, nx))
@@ -112,13 +113,11 @@ F_em = calculate_electromagnetic_force(rho_e, J, E, B)
 u, v, p = navier_stokes_with_em(u, v, p, rho, mu, dx, dy, dt, nt, F_em)
 
 # === Visualization ===
-plt.figure(figsize=(11, 7))
+plt.figure(figsize=(8, 6))
 plt.contourf(X, Y, p, alpha=0.5, cmap="viridis")
 plt.colorbar(label="Pressure")
 plt.quiver(X, Y, u, v, color="red")
 plt.xlabel("X")
 plt.ylabel("Y")
-plt.title("Velocity Field and Pressure Contours with Electromagnetic Forces")
+plt.title(f"Velocity Field and Pressure Contours (Grid: {nx}x{ny})")
 plt.show()
-
-
