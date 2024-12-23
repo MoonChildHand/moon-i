@@ -1,0 +1,26 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Grid 설정
+x = np.linspace(0, 10, 100)
+y = np.linspace(0, 10, 100)
+X, Y = np.meshgrid(x, y)
+
+# 초기 조건 설정
+u = np.sin(2 * np.pi * X / 10) * np.cos(2 * np.pi * Y / 10)
+
+# 비선형 반응항 (예시)
+def reaction(u):
+    return u * (1 - u**2)
+
+# 시간 스텝 반복
+dt = 0.01
+for _ in range(100):
+    laplacian = np.gradient(np.gradient(u, axis=0), axis=0) + np.gradient(np.gradient(u, axis=1), axis=1)
+    u += dt * (laplacian + reaction(u))
+
+# 결과 시각화
+plt.imshow(u, extent=(0, 10, 0, 10), cmap='viridis')
+plt.colorbar()
+plt.title("Simulated Periodicity")
+plt.show()
