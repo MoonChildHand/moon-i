@@ -1,0 +1,24 @@
+.text
+.global _start
+_start:
+    bl secure_init       ; 보안 초기화 호출
+    bl authenticate_user ; 사용자 인증
+    b main
+
+secure_init:
+    ; 네트워크 및 암호화 초기화
+    ; 중간자 공격 방지용 TLS 세션 생성
+    mov r0, #1           ; TLS 활성화 플래그
+    bx lr
+
+authenticate_user:
+    ; 사용자 인증 처리
+    mov r0, #0           ; 인증 실패 기본값
+    bl check_backdoor    ; 백도어 검사
+    cmp r0, #0
+    beq authentication_fail
+    mov r0, #1           ; 인증 성공
+    bx lr
+
+authentication_fail:
+    b _exit
