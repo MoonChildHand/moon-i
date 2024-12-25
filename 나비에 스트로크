@@ -1,0 +1,91 @@
+// Kotlin Implementation
+import kotlin.math.*
+
+data class Vector3(val x: Double, val y: Double, val z: Double) {
+    operator fun plus(other: Vector3) = Vector3(x + other.x, y + other.y, z + other.z)
+    operator fun times(scalar: Double) = Vector3(x * scalar, y * scalar, z * scalar)
+}
+
+class ElectromagneticFluid {
+    // Physical constants
+    private val rho = 1.0     // Density
+    private val mu = 0.01     // Viscosity
+    private val sigma = 1.0   // Electrical conductivity
+    private val epsilon = 1.0  // Electric permittivity
+    
+    fun calculateForces(
+        velocity: Vector3,
+        eField: Vector3,
+        bField: Vector3,
+        pressure: Double,
+        position: Vector3
+    ): Vector3 {
+        // Navier-Stokes terms
+        val viscousTerm = velocity * mu
+        val pressureTerm = Vector3(-pressure, -pressure, -pressure)
+        
+        // Maxwell terms
+        val lorentzForce = Vector3(
+            velocity.y * bField.z - velocity.z * bField.y,
+            velocity.z * bField.x - velocity.x * bField.z,
+            velocity.x * bField.y - velocity.y * bField.x
+        ) * sigma
+        
+        // Combined force
+        return pressureTerm + viscousTerm + lorentzForce + eField * sigma
+    }
+}
+
+// Assembly Implementation
+.data
+    rho:        .double 1.0
+    mu:         .double 0.01
+    sigma:      .double 1.0
+    epsilon:    .double 1.0
+
+.text
+.global calculate_forces
+calculate_forces:
+    push {r4-r11, lr}
+    
+    // Load physical constants
+    vldr d0, [rho]
+    vldr d1, [mu]
+    vldr d2, [sigma]
+    
+    // Calculate viscous term
+    vmul.f64 d4, d1, d16  // mu * velocity.x
+    vmul.f64 d5, d1, d17  // mu * velocity.y
+    vmul.f64 d6, d1, d18  // mu * velocity.z
+    
+    // Calculate Lorentz force
+    // F = sigma(v × B + E)
+    // Cross product
+    vmul.f64 d7, d17, d22  // vy*Bz
+    vmul.f64 d8, d18, d21  // vz*By
+    vsub.f64 d9, d7, d8    // vy*Bz - vz*By
+    
+    vmul.f64 d10, d18, d20 // vz*Bx
+    vmul.f64 d11, d16, d22 // vx*Bz
+    vsub.f64 d12, d10, d11 // vz*Bx - vx*Bz
+    
+    vmul.f64 d13, d16, d21 // vx*By
+    vmul.f64 d14, d17, d20 // vy*Bx
+    vsub.f64 d15, d13, d14 // vx*By - vy*Bx
+    
+    // Multiply by sigma
+    vmul.f64 d9, d9, d2
+    vmul.f64 d12, d12, d2
+    vmul.f64 d15, d15, d2
+    
+    // Add electric field terms
+    vadd.f64 d9, d9, d23
+    vadd.f64 d12, d12, d24
+    vadd.f64 d15, d15, d25
+    
+    // Store results
+    vstr d9, [r0]
+    vstr d12, [r0, #8]
+    vstr d15, [r0, #16]
+    
+    pop {r4-r11, pc}
