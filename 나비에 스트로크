@@ -1,96 +1,73 @@
-// Kotlin Implementation
 import kotlin.math.*
 
-data class Vector3(val x: Double, val y: Double, val z: Double) {
-    operator fun plus(other: Vector3) = Vector3(x + other.x, y + other.y, z + other.z)
-    operator fun times(scalar: Double) = Vector3(x * scalar, y * scalar, z * scalar)
-}
+class MatrixFluidDynamics {
+    data class Matrix3x3(val data: Array<DoubleArray>) {
+        operator fun times(vector: DoubleArray): DoubleArray {
+            return DoubleArray(3) { i ->
+                data[i][0] * vector[0] + data[i][1] * vector[1] + data[i][2] * vector[2]
+            }
+        }
+    }
 
-class ElectromagneticFluid {
-    // Physical constants
-    private val rho = 1.0     // Density
-    private val mu = 0.01     // Viscosity
-    private val sigma = 1.0   // Electrical conductivity
-    private val epsilon = 1.0  // Electric permittivity
-    
-    fun calculateForces(
-        velocity: Vector3,
-        eField: Vector3,
-        bField: Vector3,
-        pressure: Double,
-        position: Vector3
-    ): Vector3 {
-        // Navier-Stokes terms
-        val viscousTerm = velocity * mu
-        val pressureTerm = Vector3(-pressure, -pressure, -pressure)
+    // 물리 상수
+    private val rho = 1.0     // 밀도
+    private val mu = 0.01     // 점성
+    private val sigma = 1.0   // 전기 전도도
+    private val epsilon = 1.0  // 유전율
+
+    // 나비에-스트로크스 연산자 행렬
+    private fun createNavierStokesOperator(): Matrix3x3 {
+        return Matrix3x3(arrayOf(
+            doubleArrayOf(-mu/rho, 0.0, 0.0),
+            doubleArrayOf(0.0, -mu/rho, 0.0),
+            doubleArrayOf(0.0, 0.0, -mu/rho)
+        ))
+    }
+
+    // 로렌츠 힘 연산자 행렬 (B-field cross product)
+    private fun createLorentzOperator(B: DoubleArray): Matrix3x3 {
+        return Matrix3x3(arrayOf(
+            doubleArrayOf(0.0, -B[2], B[1]),
+            doubleArrayOf(B[2], 0.0, -B[0]),
+            doubleArrayOf(-B[1], B[0], 0.0)
+        ))
+    }
+
+    fun solve(
+        velocity: DoubleArray,
+        eField: DoubleArray,
+        bField: DoubleArray,
+        pressureGradient: DoubleArray,
+        dt: Double
+    ): DoubleArray {
+        // 선형 연산자들
+        val navierStokes = createNavierStokesOperator()
+        val lorentz = createLorentzOperator(bField)
+
+        // dv/dt = -∇p/ρ + μ∇²v/ρ + σ(E + v×B)/ρ
+        val viscousTerm = navierStokes.times(velocity)
+        val lorentzTerm = lorentz.times(velocity).map { it * sigma/rho }.toDoubleArray()
+        val electricTerm = eField.map { it * sigma/rho }.toDoubleArray()
         
-        // Maxwell terms
-        val lorentzForce = Vector3(
-            velocity.y * bField.z - velocity.z * bField.y,
-            velocity.z * bField.x - velocity.x * bField.z,
-            velocity.x * bField.y - velocity.y * bField.x
-        ) * sigma
-        
-        // Combined force
-        return pressureTerm + viscousTerm + lorentzForce + eField * sigma
+        // 최종 속도 업데이트
+        return DoubleArray(3) { i ->
+            velocity[i] + dt * (
+                -pressureGradient[i]/rho + 
+                viscousTerm[i] + 
+                lorentzTerm[i] + 
+                electricTerm[i]
+            )
+        }
+    }
+
+    // 발산 계산
+    fun calculateDivergence(velocity: Array<DoubleArray>, dx: Double): DoubleArray {
+        val div = DoubleArray(velocity[0].size)
+        for (i in 1 until velocity[0].size - 1) {
+            div[i] = (velocity[0][i+1] - velocity[0][i-1])/(2*dx) +
+                     (velocity[1][i+1] - velocity[1][i-1])/(2*dx) +
+                     (velocity[2][i+1] - velocity[2][i-1])/(2*dx)
+        }
+        return div
     }
 }
-
-// Assembly Implementation
-.data
-    rho:        .double 1.0
-    mu:         .double 0.01
-    sigma:      .double 1.0
-    epsilon:    .double 1.0
-
-.text
-.global calculate_forces
-calculate_forces:
-    push {r4-r11, lr}
-    
-    // Load physical constants
-    vldr d0, [rho]
-    vldr d1, [mu]
-    vldr d2, [sigma]
-    
-    // Calculate viscous term
-    vmul.f64 d4, d1, d16  // mu * velocity.x
-    vmul.f64 d5, d1, d17  // mu * velocity.y
-    vmul.f64 d6, d1, d18  // mu * velocity.z
-    
-    // Calculate Lorentz force
-    // F = sigma(v × B + E)
-    // Cross product
-    vmul.f64 d7, d17, d22  // vy*Bz
-    vmul.f64 d8, d18, d21  // vz*By
-    vsub.f64 d9, d7, d8    // vy*Bz - vz*By
-    
-    vmul.f64 d10, d18, d20 // vz*Bx
-    vmul.f64 d11, d16, d22 // vx*Bz
-    vsub.f64 d12, d10, d11 // vz*Bx - vx*Bz
-    
-    vmul.f64 d13, d16, d21 // vx*By
-    vmul.f64 d14, d17, d20 // vy*Bx
-    vsub.f64 d15, d13, d14 // vx*By - vy*Bx
-    
-    // Multiply by sigma
-    vmul.f64 d9, d9, d2
-    vmul.f64 d12, d12, d2
-    vmul.f64 d15, d15, d2
-    
-    // Add electric field terms
-    vadd.f64 d9, d9, d23
-    vadd.f64 d12, d12, d24
-    vadd.f64 d15, d15, d25
-    
-    // Store results
-    vstr d9, [r0]
-    vstr d12, [r0, #8]
-    vstr d15, [r0, #16]
-    
-    pop {r4-r11, pc}
-이 코드는 나비에 스트로크 방정식에 전자기력을 추가하여 구현했습니다. 주요 특징:
-
-코틀린: Vector3 클래스로 벡터 연산 구현, 로렌츠 힘 계산 포함
-어셈블리: NEON SIMD 명령어로 벡터 연산 최적화, 부동소수점 연산 구현
-물리상수: 밀도(rho), 점성(mu), 전도도(sigma), 유전율(epsilon) 포함
