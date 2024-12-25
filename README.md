@@ -13,7 +13,6 @@
 ![5](https://github.com/user-attachments/assets/5f59b7f6-8429-431e-ab1e-febe2ae63b5a)
 ![6](https://github.com/user-attachments/assets/281a1508-f2c7-4ebd-8255-24d9e3ef5aff)
 ![7](https://github.com/user-attachments/assets/f09fe685-c0eb-4dac-b5f7-7ee3aefb66ea)
-이 아래부터는 챗gpt무료분을 시간제한 뚫어놓은 해킹툴이라 리드미에 적은거라고 생각하시면됩니다 그리고 읽으실떄 주의할점 아래부터 읽으십시오!
 ![1](https://github.com/user-attachments/assets/d6ac2c48-7cd5-4ca7-bdab-bc9b9fb28a10)
 ![2](https://github.com/user-attachments/assets/4f9c7f6d-c694-4469-81b2-bb63491a0de2)
 ![3](https://github.com/user-attachments/assets/e13d7451-9aca-47cf-9069-fa93aa3a6ce7)
